@@ -22,14 +22,30 @@ function inboundAddress(token) {
   return `${inboundPrefix}+${token}@${inboundDomain}`;
 }
 
+const safeEqual = (expected, actual) => {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(actual));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
 // Mailgun signs every forwarded message: HMAC-SHA256(signingKey, timestamp + token)
 function verifyMailgunSignature({ timestamp, token, signature }) {
-  if (!timestamp || !token || !signature) return false;
-  const expected = crypto.createHmac('sha256', config.mailgun.webhookSigningKey).update(timestamp + token).digest('hex');
-  const a = Buffer.from(expected);
-  const b = Buffer.from(String(signature));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const { webhookSigningKey } = config.mailgun;
+  if (!webhookSigningKey || !timestamp || !token || !signature) return false;
+  return safeEqual(crypto.createHmac('sha256', webhookSigningKey).update(timestamp + token).digest('hex'), signature);
 }
+
+// Alternative to the signing key: a secret path segment only the Mailgun route knows,
+// for accounts whose signing key is shared with other apps
+function verifyUrlSecret(secret) {
+  const { inboundUrlSecret } = config.mailgun;
+  return Boolean(inboundUrlSecret && secret) && safeEqual(inboundUrlSecret, secret);
+}
+
+const inboundEnabled = () => {
+  const { webhookSigningKey, inboundUrlSecret, inboundDomain } = config.mailgun;
+  return Boolean((webhookSigningKey || inboundUrlSecret) && inboundDomain);
+};
 
 // Ignore duplicate deliveries of the same message (Mailgun retries reuse its token)
 const seenTokens = new Set();
@@ -80,12 +96,16 @@ async function emailImportSummary({ user, subject: emailSubject, results }) {
 }
 
 // Mailgun inbound route target: forward("https://<api-host>/api/inbound/mailgun")
-router.post('/mailgun', upload.any(), async (req, res) => {
-  if (!config.mailgun.webhookSigningKey) {
-    logger.error('MAILGUN_WEBHOOK_SIGNING_KEY not set — rejecting inbound email');
+// or, with MAILGUN_INBOUND_URL_SECRET, forward("https://<api-host>/api/inbound/mailgun/<secret>")
+router.post(['/mailgun', '/mailgun/:secret'], upload.any(), async (req, res) => {
+  const { webhookSigningKey, inboundUrlSecret } = config.mailgun;
+  if (!webhookSigningKey && !inboundUrlSecret) {
+    logger.error('Neither MAILGUN_WEBHOOK_SIGNING_KEY nor MAILGUN_INBOUND_URL_SECRET set — rejecting inbound email');
     return res.status(503).json({ error: 'Inbound email not configured' });
   }
-  if (!verifyMailgunSignature(req.body)) return res.status(401).json({ error: 'Invalid signature' });
+  if (!verifyUrlSecret(req.params.secret) && !verifyMailgunSignature(req.body)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
   if (!markSeen(req.body.token)) return res.json({ ok: true, duplicate: true });
 
   const inboundToken = findTokenInRecipients(req.body.recipient);
@@ -114,8 +134,7 @@ router.get('/address', requireAuth, async (req, res) => {
       token = newInboundToken();
       await setInboundToken({ id: req.user.userId, token });
     }
-    const { webhookSigningKey, inboundDomain } = config.mailgun;
-    res.json({ address: inboundAddress(token), enabled: Boolean(webhookSigningKey && inboundDomain) });
+    res.json({ address: inboundAddress(token), enabled: inboundEnabled() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -125,8 +144,7 @@ router.post('/address/regenerate', requireAuth, async (req, res) => {
   try {
     const token = newInboundToken();
     await setInboundToken({ id: req.user.userId, token });
-    const { webhookSigningKey, inboundDomain } = config.mailgun;
-    res.json({ address: inboundAddress(token), enabled: Boolean(webhookSigningKey && inboundDomain) });
+    res.json({ address: inboundAddress(token), enabled: inboundEnabled() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

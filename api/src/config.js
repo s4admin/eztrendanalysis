@@ -10,6 +10,7 @@ const {
   MAILGUN_DOMAIN: mailgunDomain,
   MAILGUN_FROM: mailgunFrom = 'noreply@eztrendanalysis.com',
   MAILGUN_WEBHOOK_SIGNING_KEY: mailgunWebhookSigningKey,
+  MAILGUN_INBOUND_URL_SECRET: mailgunInboundUrlSecret,
   MAILGUN_INBOUND_DOMAIN: mailgunInboundDomain,
   MAILGUN_INBOUND_PREFIX: mailgunInboundPrefix = 'trends',
   ADMIN_EMAIL: adminEmail = 'adam@pilotica.com',
@@ -26,6 +27,7 @@ export const config = {
   mailgun: {
     apiKey: mailgunApiKey, domain: mailgunDomain, from: mailgunFrom,
     webhookSigningKey: mailgunWebhookSigningKey,
+    inboundUrlSecret: mailgunInboundUrlSecret,
     inboundDomain: mailgunInboundDomain || mailgunDomain,
     inboundPrefix: mailgunInboundPrefix,
   },
