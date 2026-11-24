@@ -201,7 +201,7 @@ const ITT_TIERS = [
   { limit: 1000, label: 'ITT Starting',   maxSeconds: 5   },
   { limit: 870,  label: 'ITT Transient',  maxSeconds: 20  },
   { limit: 850,  label: 'ITT Takeoff',    maxSeconds: 300 },
-  { limit: 820,  label: 'ITT Continuous', maxSeconds: Infinity },
+  { limit: 820,  label: 'ITT Continuous', maxSeconds: 300 }, // 820–850 permitted for up to 5 minutes
 ];
 
 const SIMPLE_LIMITS = {
@@ -213,9 +213,16 @@ export function detectExceedances(engineRecords) {
   const exceedances = [];
 
   // ITT — tiered, duration-aware
-  // For each tier, track how long ITT has been above its threshold.
-  // Flag only when duration exceeds the allowed window for that tier.
+  // For each tier, track how long ITT stays above its threshold and record the event
+  // (with its full duration) once it ends, if it lasted longer than the allowed window.
   const ittActive = {}; // keyed by tier limit
+  const closeIttEvent = (tier) => {
+    const event = ittActive[tier.limit];
+    if (event && event.duration > tier.maxSeconds) {
+      exceedances.push({ ...event, parameter: tier.label, limitValue: tier.limit });
+    }
+    ittActive[tier.limit] = null;
+  };
   for (const r of engineRecords) {
     if (!r.isFlight) continue;
     const itt = r.itt;
@@ -227,30 +234,14 @@ export function detectExceedances(engineRecords) {
         } else {
           ittActive[tier.limit].duration++;
           if (itt > ittActive[tier.limit].value) ittActive[tier.limit].value = itt;
-          // Flag as soon as duration exceeds allowed window
-          if (ittActive[tier.limit].duration > tier.maxSeconds && tier.maxSeconds !== Infinity) {
-            exceedances.push({ ...ittActive[tier.limit], parameter: tier.label, limitValue: tier.limit });
-            ittActive[tier.limit] = null; // avoid duplicate flags for this event
-          }
         }
-      } else if (ittActive[tier.limit]) {
-        // ITT dropped below this tier — if duration already exceeded the window, already flagged above.
-        // For Infinity tiers (continuous), flag on exit since any exceedance counts.
-        if (tier.maxSeconds === Infinity) {
-          exceedances.push({ ...ittActive[tier.limit], parameter: tier.label, limitValue: tier.limit });
-        }
-        ittActive[tier.limit] = null;
+      } else {
+        closeIttEvent(tier);
       }
     }
   }
-  // Flush any open events at end of data
-  for (const tier of ITT_TIERS) {
-    if (ittActive[tier.limit]) {
-      if (tier.maxSeconds === Infinity || ittActive[tier.limit].duration > tier.maxSeconds) {
-        exceedances.push({ ...ittActive[tier.limit], parameter: tier.label, limitValue: tier.limit });
-      }
-    }
-  }
+  // Close any events still open at end of data
+  for (const tier of ITT_TIERS) closeIttEvent(tier);
 
   // Ng and Torque — simple threshold, any sustained exceedance
   const simpleActive = {};
