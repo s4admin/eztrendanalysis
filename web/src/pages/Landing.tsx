@@ -25,7 +25,7 @@ export default function Landing() {
             { icon: '📈', title: 'Engine Trend Monitoring', desc: 'Track ITT, Ng, Torque, and Fuel Flow across stable cruise snapshots. Linear regression and ISA correction reveal real trends before they become problems.' },
             { icon: '⚠️', title: 'Exceedance Detection', desc: 'Automatically flags ITT over 820°C for more than 5 minutes, Ng over 104%, and load factor beyond structural limits from every flight — with duration tracking and per-flight detail.' },
             { icon: '🗺️', title: 'Flight Track & Profile', desc: 'Google Maps flight tracks with altitude and engine parameter charts for every detected flight. See exactly what happened during each leg.' },
-            { icon: '🔍', title: 'CMC Fault History', desc: 'Upload your FHDB ZIP from the MyCMC app. 60+ fault codes decoded from plain English from the Primus Apex CMC documentation.' },
+            { icon: '🔍', title: 'CMC Fault History', desc: 'Upload or email your FHDB ZIP from the MyCMC app. 60+ fault codes decoded from plain English from the Primus Apex CMC documentation.' },
             { icon: '✈️', title: 'Multi-Aircraft Support', desc: 'Manage multiple aircraft under one account. Aircraft are auto-detected from the tail number in your ACMS data files.' },
             { icon: '📊', title: 'Historical Analysis', desc: 'Build a complete engine health record over time. Spot gradual ITT rise, fuel flow trends, and corrected parameter changes across hundreds of flights.' },
           ].map(f => (
@@ -43,7 +43,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { step: '1', title: 'Download from MyCMC', desc: 'Use the Honeywell MyCMC app with your Aspen Wireless Gateway to download ACMS data files from your PC-12 NG.' },
-              { step: '2', title: 'Upload the ZIP', desc: 'Drop the ACMS ZIP (or individual .txt files) into EZ Trend Analysis. Aircraft tail number is detected automatically.' },
+              { step: '2', title: 'Upload or email the ZIP', desc: 'Drop the ACMS ZIP (or individual .txt files) into EZ Trend Analysis, or email them to your personal import address straight from MyCMC on your phone or iPad. Aircraft tail number is detected automatically.' },
               { step: '3', title: 'Review your data', desc: 'See trend charts, flight history, fault codes, exceedances, and flight tracks — ready to share with your maintenance team.' },
             ].map(s => (
               <div key={s.step} className="text-center">
