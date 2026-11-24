@@ -4,12 +4,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 
 interface Aircraft { id: number; tail_number: string; make_model: string; engine_type: string; engine_serial: string; year: number }
+interface InboundAddress { address: string; enabled: boolean }
 interface UploadResult { uploadId: number; aircraftId: number; tailNumber: string; cruiseRecords: number; engineSeconds: number; navSeconds: number; exceedances: number; filename: string }
 
 export default function Dashboard() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { data: aircraft = [], isLoading } = useQuery({ queryKey: ['aircraft'], queryFn: () => api.get<Aircraft[]>('/aircraft') })
+  const { data: inbound } = useQuery({ queryKey: ['inbound-address'], queryFn: () => api.get<InboundAddress>('/inbound/address') })
 
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -90,6 +92,11 @@ export default function Dashboard() {
             ? 'Processing files sequentially…'
             : 'Drop all 4 TXT files at once, or the ZIP — aircraft detected automatically'}
         </div>
+        {inbound?.enabled && !uploading && (
+          <div className="mt-2 text-xs text-slate-400">
+            Or email the files, including the FHDB ZIP, to <span className="font-medium text-slate-600 break-all">{inbound.address}</span>
+          </div>
+        )}
         <div className="mt-4 text-xs text-slate-400">or <span className="text-sky-600 font-medium">click to browse</span></div>
       </div>
       <input ref={fileRef} type="file" accept=".zip,.txt" multiple onChange={onFileChange} className="hidden" />
@@ -138,7 +145,7 @@ export default function Dashboard() {
 
 function EmailImportCard() {
   const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['inbound-address'], queryFn: () => api.get<{ address: string; enabled: boolean }>('/inbound/address') })
+  const { data } = useQuery({ queryKey: ['inbound-address'], queryFn: () => api.get<InboundAddress>('/inbound/address') })
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
 
@@ -158,7 +165,7 @@ function EmailImportCard() {
   return (
     <div className="mt-4 bg-white border border-slate-200 rounded-xl p-4">
       <div className="text-sm font-semibold text-slate-700 mb-1">📧 Import by email</div>
-      <p className="text-xs text-slate-500 mb-3">Email the ACMS ZIP or TXT files as attachments to this address. They're imported automatically and you'll get a summary by email.</p>
+      <p className="text-xs text-slate-500 mb-3">Email the ACMS ZIP or TXT files, and the FHDB ZIP, as attachments to this address. They're imported automatically and you'll get a summary by email.</p>
       <div className="flex items-center gap-2">
         <code className="flex-1 min-w-0 truncate bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700">{data.address}</code>
         <button onClick={copy} className="shrink-0 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">{copied ? 'Copied' : 'Copy'}</button>

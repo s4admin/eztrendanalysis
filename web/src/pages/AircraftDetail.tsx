@@ -6,6 +6,7 @@ import {
   ReferenceLine, ResponsiveContainer
 } from 'recharts'
 import { api } from '../api/client'
+import { useSortable, SortTh, SortGetters } from '../components/SortableTable'
 
 interface Aircraft { id: number; tail_number: string; make_model: string; engine_type: string; engine_serial: string; year: number }
 interface CruiseRecord { id: number; flight_date: string; flight_time: string | null; altitude: number; oat: number; tas: number; torque: number; np: number; ng: number; itt: number; fuel_flow: number; corrected_itt: number; corrected_ff: number }
@@ -18,6 +19,28 @@ interface Upload { id: number; filename: string; record_count: number; engine_se
 interface UploadResult { uploadId: number; aircraftId: number; tailNumber: string; cruiseRecords: number; engineSeconds: number; navSeconds: number; exceedances: number; filename: string }
 interface FaultSummaryItem { system_id: number; fault_code: number; total_events: number; active_events: number; first_seen: string; last_seen: string; system_name: string | null; description: string | null }
 interface FaultSummaryData { summary: FaultSummaryItem[]; recent: unknown[]; legs: unknown[] }
+
+const UPLOAD_SORT: SortGetters<Upload> = {
+  file: u => u.filename.split('/').pop(), engine: u => u.engine_id, cruise: u => u.record_count,
+  engSec: u => u.engine_seconds_count, nav: u => u.nav_seconds_count, uploaded: u => u.uploaded_at,
+}
+const CRUISE_SORT: SortGetters<CruiseRecord> = {
+  date: r => [String(r.flight_date).slice(0, 10), r.flight_time], time: r => r.flight_time,
+  altitude: r => r.altitude, oat: r => r.oat, tas: r => r.tas, torque: r => r.torque, np: r => r.np, ng: r => r.ng,
+  itt: r => r.itt, ff: r => r.fuel_flow, citt: r => r.corrected_itt, cff: r => r.corrected_ff,
+}
+const CRUISE_COLUMNS = [
+  ['Date', 'date'], ['Time', 'time'], ['Alt ft', 'altitude'], ['OAT °C', 'oat'], ['TAS kts', 'tas'], ['TRQ %', 'torque'],
+  ['Np', 'np'], ['Ng %', 'ng'], ['ITT °C', 'itt'], ['FF lbs/hr', 'ff'], ['C.ITT', 'citt'], ['C.FF', 'cff'],
+]
+const FAULT_SORT: SortGetters<FaultSummaryItem> = {
+  sys: f => [f.system_id, f.fault_code], code: f => [f.fault_code, f.system_id], system: f => f.system_name,
+  description: f => f.description, events: f => f.total_events, active: f => f.active_events,
+  first: f => f.first_seen, last: f => f.last_seen,
+}
+const GFORCE_SORT: SortGetters<Exceedance> = {
+  date: e => [String(e.flight_date).slice(0, 10), e.flight_time], time: e => e.flight_time, peak: e => e.value, limit: e => e.limit_value,
+}
 
 function linReg(vals: number[]) {
   const n = vals.length; if (n < 2) return { slope: 0, intercept: vals[0] ?? 0 }
@@ -223,6 +246,11 @@ export default function AircraftDetail() {
     if (e.target.files?.length) doUploadFiles(e.target.files)
     e.target.value = ''
   }
+
+  const uploadTable = useSortable(uploads, UPLOAD_SORT, { key: 'uploaded', dir: 'desc' })
+  const cruiseTable = useSortable(records, CRUISE_SORT, { key: 'date', dir: 'desc' })
+  const faultTable = useSortable(faultData?.summary ?? [], FAULT_SORT, { key: 'sys', dir: 'asc' })
+  const gForceTable = useSortable(exceedances.filter(e => e.parameter === 'G-Force'), GFORCE_SORT, { key: 'date', dir: 'desc' })
 
   if (!aircraft) return <div className="text-slate-400 text-sm">Loading…</div>
 
@@ -454,10 +482,10 @@ export default function AircraftDetail() {
           <h2 className="font-semibold text-slate-900 mb-3">Upload History</h2>
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100">
-              <tr>{['File', 'Engine ID', 'Cruise Pts', 'Eng Seconds', 'Nav Points', 'Uploaded', ''].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide pr-4">{h}</th>)}</tr>
+              <tr>{[['File', 'file'], ['Engine ID', 'engine'], ['Cruise Pts', 'cruise'], ['Eng Seconds', 'engSec'], ['Nav Points', 'nav'], ['Uploaded', 'uploaded'], ['', '']].map(([h, k]) => <SortTh key={h} label={h} sortKey={k} sort={uploadTable.sort} onSort={uploadTable.toggle} className="text-left pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide pr-4" />)}</tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {uploads.map(u => (
+              {uploadTable.sorted.map(u => (
                 <tr key={u.id} className={`cursor-pointer hover:bg-slate-50 ${(selectedUpload ?? uploads[0]?.id) === u.id ? 'bg-sky-50' : ''}`} onClick={() => setSelectedUpload(u.id)}>
                   <td className="py-2 pr-4 text-slate-700 font-mono text-xs max-w-xs truncate">{u.filename.split('/').pop()}</td>
                   <td className="py-2 pr-4 text-slate-500 text-xs">{u.engine_id || '—'}</td>
@@ -497,10 +525,10 @@ export default function AircraftDetail() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
               <thead className="border-b border-slate-100">
-                <tr>{['Date', 'Time', 'Alt ft', 'OAT °C', 'TAS kts', 'TRQ %', 'Np', 'Ng %', 'ITT °C', 'FF lbs/hr', 'C.ITT', 'C.FF'].map(h => <th key={h} className="text-right first:text-left pb-2 pr-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{h}</th>)}</tr>
+                <tr>{CRUISE_COLUMNS.map(([h, k]) => <SortTh key={h} label={h} sortKey={k} sort={cruiseTable.sort} onSort={cruiseTable.toggle} className="text-right first:text-left pb-2 pr-3 text-xs font-semibold text-slate-500 whitespace-nowrap" />)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {records.map(r => (
+                {cruiseTable.sorted.map(r => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="py-1.5 pr-3 text-slate-700">{String(r.flight_date).slice(0, 10)}</td>
                     <td className="py-1.5 pr-3 text-right text-slate-600">{r.flight_time ?? '—'}</td>
@@ -535,10 +563,10 @@ export default function AircraftDetail() {
             </div>
             <table className="w-full text-sm">
               <thead className="border-b border-slate-100">
-                <tr>{['Sys', 'Code', 'System', 'Description', 'Events', 'Active', 'First Seen', 'Last Seen'].map(h => <th key={h} className="text-left pb-2 pr-4 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
+                <tr>{[['Sys', 'sys'], ['Code', 'code'], ['System', 'system'], ['Description', 'description'], ['Events', 'events'], ['Active', 'active'], ['First Seen', 'first'], ['Last Seen', 'last']].map(([h, k]) => <SortTh key={h} label={h} sortKey={k} sort={faultTable.sort} onSort={faultTable.toggle} className="text-left pb-2 pr-4 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap" />)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {faultData.summary.map(f => (
+                {faultTable.sorted.map(f => (
                   <tr key={f.system_id + '-' + f.fault_code} className="hover:bg-slate-50">
                     <td className="py-2 pr-3 font-mono text-xs text-slate-500">{f.system_id}</td>
                     <td className="py-2 pr-3 font-mono text-xs font-semibold text-slate-700">{f.fault_code}</td>
@@ -566,10 +594,10 @@ export default function AircraftDetail() {
           <p className="text-xs text-slate-400 mb-4">Informational only — not included in trend status. Events above +3.4g should be reviewed per the PC-12 NG Flight Manual. Verify sensor calibration before any maintenance action.</p>
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100">
-              <tr>{['Date', 'Time', 'Peak G', 'Limit'].map(h => <th key={h} className="text-left pb-2 pr-6 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>)}</tr>
+              <tr>{[['Date', 'date'], ['Time', 'time'], ['Peak G', 'peak'], ['Limit', 'limit']].map(([h, k]) => <SortTh key={h} label={h} sortKey={k} sort={gForceTable.sort} onSort={gForceTable.toggle} className="text-left pb-2 pr-6 text-xs font-semibold text-slate-500 uppercase tracking-wide" />)}</tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {gForceExceedances.map(e => (
+              {gForceTable.sorted.map(e => (
                 <tr key={e.id} className="hover:bg-slate-50">
                   <td className="py-2 pr-6 text-slate-700">{String(e.flight_date).slice(0, 10)}</td>
                   <td className="py-2 pr-6 font-mono text-slate-600">{e.flight_time}</td>

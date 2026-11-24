@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
+import { useSortable, SortTh, SortGetters } from '../components/SortableTable'
 
 // Maps JS API is loaded at runtime from a script tag (no @types/google.maps)
 declare global { interface Window { google: any } }
@@ -41,6 +42,16 @@ function duration(mins: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+const FLIGHT_SORT: SortGetters<Flight> = {
+  date: f => [String(f.flight_date).slice(0, 10), f.depart_time], depart: f => f.depart_time, arrive: f => f.arrive_time,
+  duration: f => f.duration_minutes, maxAlt: f => f.max_altitude, avgAlt: f => f.avg_altitude, fuel: f => f.fuel_used_lbs,
+  fuelHr: f => f.avg_fuel_flow_lbs_hr, maxItt: f => f.max_itt, avgItt: f => f.avg_itt, maxTas: f => f.max_tas, distance: f => f.distance_nm,
+}
+const FLIGHT_COLUMNS = [
+  ['Date', 'date'], ['Depart', 'depart'], ['Arrive', 'arrive'], ['Flight Time', 'duration'], ['Max Alt', 'maxAlt'], ['Avg Alt', 'avgAlt'],
+  ['Fuel Used', 'fuel'], ['Fuel/hr', 'fuelHr'], ['Max ITT', 'maxItt'], ['Avg ITT', 'avgItt'], ['Max TAS', 'maxTas'], ['Distance', 'distance'],
+]
+
 export default function FlightLog() {
   const { id } = useParams<{ id: string }>()
   const aircraftId = Number(id)
@@ -55,6 +66,7 @@ export default function FlightLog() {
     queryKey: ['flights', aircraftId],
     queryFn: () => api.get<Flight[]>('/flightlog/aircraft/' + aircraftId + '/flights')
   })
+  const flightTable = useSortable(flights, FLIGHT_SORT, { key: 'date', dir: 'desc' })
   const detectMutation = useMutation({
     mutationFn: () => api.post('/flightlog/aircraft/' + aircraftId + '/flights/detect', {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['flights', aircraftId] })
@@ -111,13 +123,13 @@ export default function FlightLog() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {['Date','Depart','Arrive','Flight Time','Max Alt','Avg Alt','Fuel Used','Fuel/hr','Max ITT','Avg ITT','Max TAS','Distance'].map(h => (
-                  <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                {FLIGHT_COLUMNS.map(([h, k]) => (
+                  <SortTh key={h} label={h} sortKey={k} sort={flightTable.sort} onSort={flightTable.toggle} className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap" />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {flights.map(f => (
+              {flightTable.sorted.map(f => (
                 <tr
                   key={f.id}
                   onClick={() => setSelected(selected?.id === f.id ? null : f)}

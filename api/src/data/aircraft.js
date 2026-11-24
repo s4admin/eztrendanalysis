@@ -77,3 +77,12 @@ export async function findOrCreateAircraftByTail({ userId, tailNumber, engineSer
   const aircraft = await findAircraftById({ id });
   return { aircraft, created: true };
 }
+
+// Aircraft whose earlier uploads came from the given CMC unit serial: ACMS uploads keep it
+// in the filename (ACMS_0461097_.../file.txt), FHDB uploads in engine_id
+export const findAircraftByUnitSerial = ({ userId, serial }) =>
+  query(
+    `SELECT DISTINCT a.* FROM aircraft a JOIN uploads u ON u.aircraft_id = a.id
+     WHERE a.user_id = ? AND (u.filename LIKE ? OR u.engine_id = ?)`,
+    [userId, `%\\_${serial}\\_%`, serial]
+  );
