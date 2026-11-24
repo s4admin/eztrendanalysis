@@ -150,6 +150,20 @@ const migrations = [
     FOREIGN KEY (aircraft_id) REFERENCES aircraft(id) ON DELETE CASCADE,
     INDEX idx_upload (upload_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS load_factor_days (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    upload_id INT NOT NULL,
+    aircraft_id INT NOT NULL,
+    flight_date DATE NOT NULL,
+    peak_g DECIMAL(6,3) NOT NULL,
+    peak_time TIME,
+    low_g DECIMAL(6,3) NOT NULL,
+    low_time TIME,
+    samples INT DEFAULT 0,
+    FOREIGN KEY (upload_id) REFERENCES uploads(id) ON DELETE CASCADE,
+    FOREIGN KEY (aircraft_id) REFERENCES aircraft(id) ON DELETE CASCADE,
+    INDEX idx_aircraft_date (aircraft_id, flight_date)
+  )`,
   `CREATE TABLE IF NOT EXISTS detected_flights (
     id INT AUTO_INCREMENT PRIMARY KEY,
     aircraft_id INT NOT NULL,

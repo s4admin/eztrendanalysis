@@ -51,6 +51,7 @@ export default function Dashboard() {
         qc.invalidateQueries({ queryKey: ['records', lastResult.aircraftId] })
         qc.invalidateQueries({ queryKey: ['trend', lastResult.aircraftId] })
         qc.invalidateQueries({ queryKey: ['exceedances', lastResult.aircraftId] })
+        qc.invalidateQueries({ queryKey: ['load-factor', lastResult.aircraftId] })
       }
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')

@@ -147,52 +147,59 @@ export function parseNavairLog(content) {
   return records;
 }
 
-// ── Aircraft Data Log Parser (g-force events) ───────────────────────────────
-// col6=accelLat col7=accelLon col8=heading col33=pitch col34=roll
+// ── Aircraft Data Log Parser (load factor) ──────────────────────────────────
+// No column documentation is available; meanings are inferred from the data:
+//   col6 = pitch attitude (deg), col7 = bank angle (deg), col8 = heading (deg)
+//   col9–11 = body rates (deg/s), col14 = longitudinal accel (tracks sin(pitch))
+//   col12 = vertical inertial acceleration in g with gravity removed — ~0 on the ground
+//           and in steady flight, unaffected by pitch/bank — so load factor ≈ 1 + col12
 // PC-12 NG load limits: +3.4g / -1.35g
-// col6 tracks with the normal (vertical) load axis — ~0.87g at rest, ~1g in level flight
-const G_POS_LIMIT = 3.4;
-const G_NEG_LIMIT = -1.35;
+export const G_POS_LIMIT = 3.4;
+export const G_NEG_LIMIT = -1.35;
+const VERTICAL_ACCEL_COL = 12;
 
+// Returns limit exceedances and, per day, the highest and lowest load factor seen
 export function parseAircraftLog(content) {
   const events = [];
-  let inEvent = false;
-  let eventStart = null;
-  // Track whether we've seen any significant motion (to skip ACMS power-up initialization)
-  let seenFlight = false;
+  const days = new Map();
+  let event = null;
   for (const rawLine of content.split('\n')) {
     const line = rawLine.trim();
     if (!line.match(/^\d{8},/)) continue;
     const cols = line.split(',').map(s => s.trim());
     if (cols.length < 35) continue;
     const { flightDate, flightTime } = parseDate(cols[0], cols[1]);
-    const normalG = parseFloat(cols[6]);
-    if (isNaN(normalG)) continue;
-    // Reject sensor spikes outside physically plausible range for PC-12 NG
-    // Structural limits: +3.4g / -1.35g. Allow margin but reject obvious noise.
-    if (normalG > 4.5 || normalG < -2.0) continue;
-    // Skip ground / ACMS init phase — require sustained positive load > 1.2g
-    // (engine startup vibrations stay near 0.87g; first bank/climb pushes above 1.2)
-    if (!seenFlight && normalG > 1.2) seenFlight = true;
-    if (!seenFlight) continue;
-    // Only flag positive g exceedances — the negative axis readings appear to reflect
-    // pitch attitude rather than true negative load factor on this sensor configuration
-    const exceeded = normalG > G_POS_LIMIT;
-    if (exceeded) {
-      if (!inEvent) {
-        inEvent = true;
-        eventStart = { flightDate, flightTime, value: parseFloat(normalG.toFixed(2)) };
-      } else if (Math.abs(normalG) > Math.abs(eventStart.value)) {
-        eventStart.value = parseFloat(normalG.toFixed(2));
+    const verticalAccel = parseFloat(cols[VERTICAL_ACCEL_COL]);
+    if (!flightDate || isNaN(verticalAccel)) continue;
+    // Reject sensor noise far outside anything the airframe could see
+    if (Math.abs(verticalAccel) > 5) continue;
+    const loadFactor = parseFloat((1 + verticalAccel).toFixed(3));
+
+    const day = days.get(flightDate);
+    if (!day) {
+      days.set(flightDate, { flightDate, peakG: loadFactor, peakTime: flightTime, lowG: loadFactor, lowTime: flightTime, samples: 1 });
+    } else {
+      day.samples++;
+      if (loadFactor > day.peakG) { day.peakG = loadFactor; day.peakTime = flightTime; }
+      if (loadFactor < day.lowG) { day.lowG = loadFactor; day.lowTime = flightTime; }
+    }
+
+    const limit = loadFactor > G_POS_LIMIT ? G_POS_LIMIT : loadFactor < G_NEG_LIMIT ? G_NEG_LIMIT : null;
+    if (limit != null) {
+      if (!event || event.limitValue !== limit) {
+        if (event) events.push(event);
+        event = { flightDate, flightTime, value: loadFactor, limitValue: limit, duration: 1 };
+      } else {
+        event.duration++;
+        if (Math.abs(loadFactor) > Math.abs(event.value)) event.value = loadFactor;
       }
-    } else if (inEvent) {
-      events.push(eventStart);
-      inEvent = false;
-      eventStart = null;
+    } else if (event) {
+      events.push(event);
+      event = null;
     }
   }
-  if (inEvent && eventStart) events.push(eventStart);
-  return events;
+  if (event) events.push(event);
+  return { events, loadFactorDays: [...days.values()] };
 }
 
 // ── Exceedance Detection ────────────────────────────────────────────────────
@@ -327,6 +334,7 @@ export async function parseAcmsZip(buffer) {
   const dir = await unzipper.Open.buffer(buffer);
   const result = { cruiseRecords: [], engineSeconds: [], navSeconds: [], exceedances: [], engineId: '', tailNumber: null, flightHours: null, filename: '' };
   const gForceEvents = [];
+  const loadFactorDays = [];
   for (const entry of dir.files) {
     if (entry.path.endsWith('/') || entry.type === 'Directory') continue;
     // Skip macOS resource-fork metadata (__MACOSX/._file) that would overwrite the real files
@@ -357,8 +365,9 @@ export async function parseAcmsZip(buffer) {
         result.flightHours = meta.flightHours;
       }
     } else if (name.includes('aircraft_data')) {
-      const events = parseAircraftLog(content);
+      const { events, loadFactorDays: days } = parseAircraftLog(content);
       gForceEvents.push(...events);
+      loadFactorDays.push(...days);
       if (!result.tailNumber) {
         const meta = extractAircraftMeta(content);
         result.tailNumber = meta.tailNumber;
@@ -368,8 +377,9 @@ export async function parseAcmsZip(buffer) {
   }
   result.exceedances = [
     ...detectExceedances(result.engineSeconds),
-    ...gForceEvents.map(e => ({ ...e, parameter: 'G-Force', limitValue: G_POS_LIMIT })),
+    ...gForceEvents.map(e => ({ ...e, parameter: 'G-Force' })),
   ];
+  result.loadFactorDays = loadFactorDays;
   if (!result.filename) result.filename = 'acms_upload.zip';
   return result;
 }
@@ -393,9 +403,9 @@ export function parseAcmsTxt(buffer, filename) {
   }
   if (fname.includes('aircraft_data')) {
     const meta = extractAircraftMeta(content);
-    const gEvents = parseAircraftLog(content);
-    const exceedances = gEvents.map(e => ({ ...e, parameter: 'G-Force', limitValue: e.value >= 0 ? G_POS_LIMIT : G_NEG_LIMIT }));
-    return { ...meta, cruiseRecords: [], engineSeconds: [], navSeconds: [], exceedances, engineId: '', filename };
+    const { events, loadFactorDays } = parseAircraftLog(content);
+    const exceedances = events.map(e => ({ ...e, parameter: 'G-Force' }));
+    return { ...meta, cruiseRecords: [], engineSeconds: [], navSeconds: [], exceedances, loadFactorDays, engineId: '', filename };
   }
   // Unknown format — try stable cruise as fallback
   const records = parseStableCruise(content);

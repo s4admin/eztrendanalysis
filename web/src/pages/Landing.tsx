@@ -23,7 +23,7 @@ export default function Landing() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             { icon: '📈', title: 'Engine Trend Monitoring', desc: 'Track ITT, Ng, Torque, and Fuel Flow across stable cruise snapshots. Linear regression and ISA correction reveal real trends before they become problems.' },
-            { icon: '⚠️', title: 'Exceedance Detection', desc: 'Automatically flags ITT over 820°C, Ng over 104%, and positive G events from every flight — with duration tracking and per-flight detail.' },
+            { icon: '⚠️', title: 'Exceedance Detection', desc: 'Automatically flags ITT over 820°C for more than 5 minutes, Ng over 104%, and load factor beyond structural limits from every flight — with duration tracking and per-flight detail.' },
             { icon: '🗺️', title: 'Flight Track & Profile', desc: 'Google Maps flight tracks with altitude and engine parameter charts for every detected flight. See exactly what happened during each leg.' },
             { icon: '🔍', title: 'CMC Fault History', desc: 'Upload your FHDB ZIP from the MyCMC app. 60+ fault codes decoded from plain English from the Primus Apex CMC documentation.' },
             { icon: '✈️', title: 'Multi-Aircraft Support', desc: 'Manage multiple aircraft under one account. Aircraft are auto-detected from the tail number in your ACMS data files.' },

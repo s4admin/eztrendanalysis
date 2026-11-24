@@ -1,5 +1,5 @@
 import { findAircraftById, findOrCreateAircraftByTail, findAircraftByEngineSerial, updateAircraft, inferAircraftMetaFromEngineSerial } from '../../data/aircraft.js';
-import { insertUpload, insertCruiseRecords, insertEngineSeconds, insertNavSeconds, insertExceedances } from '../../data/uploads.js';
+import { insertUpload, insertCruiseRecords, insertEngineSeconds, insertNavSeconds, insertExceedances, insertLoadFactorDays } from '../../data/uploads.js';
 import { parseAcmsZip, parseAcmsTxt } from '../analysis/index.js';
 
 const importError = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -18,7 +18,8 @@ export async function importTrendFile({ userId, buffer, originalname, aircraftId
   }
 
   const { cruiseRecords, engineSeconds, navSeconds, exceedances, engineId, tailNumber, filename } = parsed;
-  const totalRecords = cruiseRecords.length + engineSeconds.length + navSeconds.length + exceedances.length;
+  const loadFactorDays = parsed.loadFactorDays || [];
+  const totalRecords = cruiseRecords.length + engineSeconds.length + navSeconds.length + exceedances.length + loadFactorDays.length;
   if (totalRecords === 0) throw importError('No valid data found in file');
 
   // Resolve aircraft: use provided aircraftId, or auto-detect from file data
@@ -61,6 +62,7 @@ export async function importTrendFile({ userId, buffer, originalname, aircraftId
   if (engineSeconds.length) await insertEngineSeconds(engineSeconds.map(r => ({ ...r, uploadId, aircraftId: aid })));
   if (navSeconds.length) await insertNavSeconds(navSeconds.map(r => ({ ...r, uploadId, aircraftId: aid })));
   if (exceedances.length) await insertExceedances(exceedances.map(r => ({ ...r, uploadId, aircraftId: aid })));
+  if (loadFactorDays.length) await insertLoadFactorDays(loadFactorDays.map(r => ({ ...r, uploadId, aircraftId: aid })));
 
   // Trigger flight detection after new engine data is stored
   if (engineSeconds.length) {

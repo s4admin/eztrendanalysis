@@ -16,6 +16,7 @@ interface Exceedance { id: number; flight_date: string; flight_time: string; par
 interface TrendParam { slope: number; mean: number; stdDev: number; trending: string; anomalyIndices: number[]; rSquared: number; isAnomaly: boolean }
 interface TrendData { status: string; parameters: Record<string, TrendParam> }
 interface Upload { id: number; filename: string; record_count: number; engine_seconds_count: number; nav_seconds_count: number; uploaded_at: string; engine_id: string }
+interface LoadFactorDay { flight_date: string; peak_g: number; peak_time: string | null; low_g: number; low_time: string | null }
 interface UploadResult { uploadId: number; aircraftId: number; tailNumber: string; cruiseRecords: number; engineSeconds: number; navSeconds: number; exceedances: number; filename: string }
 interface FaultSummaryItem { system_id: number; fault_code: number; total_events: number; active_events: number; first_seen: string; last_seen: string; system_name: string | null; description: string | null }
 interface FaultSummaryData { summary: FaultSummaryItem[]; recent: unknown[]; legs: unknown[] }
@@ -38,9 +39,11 @@ const FAULT_SORT: SortGetters<FaultSummaryItem> = {
   description: f => f.description, events: f => f.total_events, active: f => f.active_events,
   first: f => f.first_seen, last: f => f.last_seen,
 }
-const GFORCE_SORT: SortGetters<Exceedance> = {
-  date: e => [String(e.flight_date).slice(0, 10), e.flight_time], time: e => e.flight_time, peak: e => e.value, limit: e => e.limit_value,
+const LOAD_FACTOR_SORT: SortGetters<LoadFactorDay> = {
+  date: d => d.flight_date, peak: d => d.peak_g, peakTime: d => d.peak_time, low: d => d.low_g, lowTime: d => d.low_time,
 }
+const G_POS_LIMIT = 3.4, G_NEG_LIMIT = -1.35
+const gColor = (g: number) => g > G_POS_LIMIT || g < G_NEG_LIMIT ? 'text-red-600 font-semibold' : g >= 2 || g <= 0 ? 'text-amber-600 font-semibold' : 'text-slate-700'
 
 function linReg(vals: number[]) {
   const n = vals.length; if (n < 2) return { slope: 0, intercept: vals[0] ?? 0 }
@@ -185,6 +188,7 @@ export default function AircraftDetail() {
   const { data: records = [] } = useQuery({ queryKey: ['records', aircraftId], queryFn: () => api.get<CruiseRecord[]>('/aircraft/' + aircraftId + '/records') })
   const { data: trend } = useQuery({ queryKey: ['trend', aircraftId], queryFn: () => api.get<TrendData>('/aircraft/' + aircraftId + '/trend') })
   const { data: uploads = [] } = useQuery({ queryKey: ['uploads', aircraftId], queryFn: () => api.get<Upload[]>('/aircraft/' + aircraftId + '/uploads') })
+  const { data: loadFactorDays = [] } = useQuery({ queryKey: ['load-factor', aircraftId], queryFn: () => api.get<LoadFactorDay[]>('/aircraft/' + aircraftId + '/load-factor') })
   const { data: exceedances = [] } = useQuery({ queryKey: ['exceedances', aircraftId], queryFn: () => api.get<Exceedance[]>('/aircraft/' + aircraftId + '/exceedances') })
   const { data: faultData } = useQuery({
     queryKey: ['faults', aircraftId],
@@ -232,6 +236,7 @@ export default function AircraftDetail() {
         qc.invalidateQueries({ queryKey: ['trend', aircraftId] })
         qc.invalidateQueries({ queryKey: ['uploads', aircraftId] })
         qc.invalidateQueries({ queryKey: ['exceedances', aircraftId] })
+        qc.invalidateQueries({ queryKey: ['load-factor', aircraftId] })
       }
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')
@@ -250,7 +255,7 @@ export default function AircraftDetail() {
   const uploadTable = useSortable(uploads, UPLOAD_SORT, { key: 'uploaded', dir: 'desc' })
   const cruiseTable = useSortable(records, CRUISE_SORT, { key: 'date', dir: 'desc' })
   const faultTable = useSortable(faultData?.summary ?? [], FAULT_SORT, { key: 'sys', dir: 'asc' })
-  const gForceTable = useSortable(exceedances.filter(e => e.parameter === 'G-Force'), GFORCE_SORT, { key: 'date', dir: 'desc' })
+  const loadFactorTable = useSortable(loadFactorDays, LOAD_FACTOR_SORT, { key: 'date', dir: 'desc' })
 
   if (!aircraft) return <div className="text-slate-400 text-sm">Loading…</div>
 
@@ -501,6 +506,7 @@ export default function AircraftDetail() {
                         qc.invalidateQueries({ queryKey: ['uploads', aircraftId] })
                         qc.invalidateQueries({ queryKey: ['records', aircraftId] })
                         qc.invalidateQueries({ queryKey: ['exceedances', aircraftId] })
+                        qc.invalidateQueries({ queryKey: ['load-factor', aircraftId] })
                         qc.invalidateQueries({ queryKey: ['trend', aircraftId] })
                         qc.invalidateQueries({ queryKey: ['engine-seconds', u.id] })
                         qc.invalidateQueries({ queryKey: ['nav-track', u.id] })
@@ -584,29 +590,41 @@ export default function AircraftDetail() {
         )}
       </div>
 
-      {/* G-Force events — informational only, not part of trend status */}
-      {gForceExceedances.length > 0 && (
+      {/* Load factor — estimated from the aircraft data log; informational, not part of trend status */}
+      {(loadFactorDays.length > 0 || gForceExceedances.length > 0) && (
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="font-semibold text-slate-900 mb-1">
-            G-Force Events
-            <span className="text-xs font-normal text-slate-400 ml-2">{gForceExceedances.length} events above +3.4g structural limit</span>
+            Load Factor <span className="text-xs font-normal text-slate-400 ml-1">estimated</span>
           </h2>
-          <p className="text-xs text-slate-400 mb-4">Informational only — not included in trend status. Events above +3.4g should be reviewed per the PC-12 NG Flight Manual. Verify sensor calibration before any maintenance action.</p>
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-100">
-              <tr>{[['Date', 'date'], ['Time', 'time'], ['Peak G', 'peak'], ['Limit', 'limit']].map(([h, k]) => <SortTh key={h} label={h} sortKey={k} sort={gForceTable.sort} onSort={gForceTable.toggle} className="text-left pb-2 pr-6 text-xs font-semibold text-slate-500 uppercase tracking-wide" />)}</tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {gForceTable.sorted.map(e => (
-                <tr key={e.id} className="hover:bg-slate-50">
-                  <td className="py-2 pr-6 text-slate-700">{String(e.flight_date).slice(0, 10)}</td>
-                  <td className="py-2 pr-6 font-mono text-slate-600">{e.flight_time}</td>
-                  <td className="py-2 pr-6 font-mono font-semibold" style={{ color: parseFloat(String(e.value)) >= 4.0 ? '#dc2626' : '#ea580c' }}>+{parseFloat(String(e.value)).toFixed(1)}g</td>
-                  <td className="py-2 text-slate-400 text-xs">+{parseFloat(String(e.limit_value)).toFixed(1)}g</td>
-                </tr>
+          <p className="text-xs text-slate-400 mb-4">Highest and lowest vertical load per day, from the ACMS aircraft data log. PC-12 NG limits are +3.4g / −1.35g. Estimated from an undocumented data column — informational only, not part of trend status.</p>
+          {gForceExceedances.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm">
+              <div className="font-semibold text-red-800 mb-1">⚠ Load limit exceedances</div>
+              {gForceExceedances.map(e => (
+                <div key={e.id} className="text-red-700">
+                  {parseFloat(String(e.value)) > 0 ? '+' : ''}{parseFloat(String(e.value)).toFixed(2)}g (limit {parseFloat(String(e.limit_value)) > 0 ? '+' : ''}{parseFloat(String(e.limit_value)).toFixed(2)}g) · {String(e.flight_date).slice(0, 10)} {e.flight_time}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+          {loadFactorDays.length > 0 && (
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-100">
+                <tr>{[['Date', 'date'], ['Peak G', 'peak'], ['At', 'peakTime'], ['Lowest G', 'low'], ['At', 'lowTime']].map(([h, k]) => <SortTh key={k} label={h} sortKey={k} sort={loadFactorTable.sort} onSort={loadFactorTable.toggle} className="text-left pb-2 pr-6 text-xs font-semibold text-slate-500 uppercase tracking-wide" />)}</tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {loadFactorTable.sorted.map(d => (
+                  <tr key={d.flight_date} className="hover:bg-slate-50">
+                    <td className="py-2 pr-6 text-slate-700">{d.flight_date}</td>
+                    <td className={`py-2 pr-6 font-mono ${gColor(d.peak_g)}`}>{d.peak_g > 0 ? '+' : ''}{Number(d.peak_g).toFixed(2)}g</td>
+                    <td className="py-2 pr-6 font-mono text-xs text-slate-400">{d.peak_time ?? '—'}</td>
+                    <td className={`py-2 pr-6 font-mono ${gColor(d.low_g)}`}>{d.low_g > 0 ? '+' : ''}{Number(d.low_g).toFixed(2)}g</td>
+                    <td className="py-2 font-mono text-xs text-slate-400">{d.low_time ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

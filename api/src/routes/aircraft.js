@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/auth/index.js';
 import { findAircraftByUser, findAircraftById, insertAircraft, updateAircraft, deleteAircraft } from '../data/aircraft.js';
-import { findUploadsByAircraft, findRecordsByAircraft, findExceedancesByAircraft, findEngineSecondsByAircraft } from '../data/uploads.js';
+import { findUploadsByAircraft, findRecordsByAircraft, findExceedancesByAircraft, findEngineSecondsByAircraft, findLoadFactorDaysByAircraft } from '../data/uploads.js';
 import { analyzeTrend } from '../logic/analysis/index.js';
 
 const router = Router();
@@ -63,6 +63,12 @@ router.get('/:id/exceedances', async (req, res) => {
   const aircraft = await findAircraftById({ id: Number(req.params.id), userId: req.user.userId });
   if (!aircraft) return res.status(404).json({ error: 'Not found' });
   res.json(await findExceedancesByAircraft({ aircraftId: aircraft.id }));
+});
+
+router.get('/:id/load-factor', async (req, res) => {
+  const aircraft = await findAircraftById({ id: Number(req.params.id), userId: req.user.userId });
+  if (!aircraft) return res.status(404).json({ error: 'Not found' });
+  res.json(await findLoadFactorDaysByAircraft({ aircraftId: aircraft.id }));
 });
 
 router.get('/:id/engine-seconds', async (req, res) => {

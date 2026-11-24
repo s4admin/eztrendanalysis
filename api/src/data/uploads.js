@@ -106,3 +106,24 @@ export const findExceedancesByAircraft = ({ aircraftId }) =>
 
 export const findExceedancesByUpload = ({ uploadId }) =>
   query('SELECT * FROM exceedances WHERE upload_id = ? ORDER BY flight_date, flight_time', [uploadId]);
+
+export async function insertLoadFactorDays(records) {
+  if (!records.length) return;
+  await getPool().query(
+    'INSERT INTO load_factor_days (upload_id,aircraft_id,flight_date,peak_g,peak_time,low_g,low_time,samples) VALUES ?',
+    [records.map(r => [r.uploadId, r.aircraftId, r.flightDate, r.peakG, r.peakTime, r.lowG, r.lowTime, r.samples])]
+  );
+}
+
+// One row per day: the highest peak and lowest low across all uploads covering that day
+export const findLoadFactorDaysByAircraft = ({ aircraftId }) =>
+  query(
+    `SELECT DATE_FORMAT(d.flight_date, '%Y-%m-%d') AS flight_date,
+       (SELECT peak_g FROM load_factor_days p WHERE p.aircraft_id = d.aircraft_id AND p.flight_date = d.flight_date ORDER BY peak_g DESC LIMIT 1) AS peak_g,
+       (SELECT peak_time FROM load_factor_days p WHERE p.aircraft_id = d.aircraft_id AND p.flight_date = d.flight_date ORDER BY peak_g DESC LIMIT 1) AS peak_time,
+       (SELECT low_g FROM load_factor_days l WHERE l.aircraft_id = d.aircraft_id AND l.flight_date = d.flight_date ORDER BY low_g ASC LIMIT 1) AS low_g,
+       (SELECT low_time FROM load_factor_days l WHERE l.aircraft_id = d.aircraft_id AND l.flight_date = d.flight_date ORDER BY low_g ASC LIMIT 1) AS low_time
+     FROM (SELECT DISTINCT aircraft_id, flight_date FROM load_factor_days WHERE aircraft_id = ?) d
+     ORDER BY d.flight_date DESC`,
+    [aircraftId]
+  );
