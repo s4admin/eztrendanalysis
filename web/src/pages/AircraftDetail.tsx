@@ -3,27 +3,21 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer, ComposedChart, Scatter, Legend
+  ReferenceLine, ResponsiveContainer
 } from 'recharts'
 import { api } from '../api/client'
 
 interface Aircraft { id: number; tail_number: string; make_model: string; engine_type: string; engine_serial: string; year: number }
-interface CruiseRecord { id: number; flight_date: string; altitude: number; oat: number; tas: number; torque: number; np: number; ng: number; itt: number; fuel_flow: number; corrected_itt: number; corrected_ff: number }
+interface CruiseRecord { id: number; flight_date: string; flight_time: string | null; altitude: number; oat: number; tas: number; torque: number; np: number; ng: number; itt: number; fuel_flow: number; corrected_itt: number; corrected_ff: number }
 interface EngineSecond { flight_date: string; flight_time: string; altitude: number; ias: number; tas: number; itt: number; ng: number; torque: number; fuel_flow: number }
 interface NavPoint { flight_date: string; flight_time: string; lat: number; lon: number; altitude: number; tas: number; ias: number; oat: number }
 interface Exceedance { id: number; flight_date: string; flight_time: string; parameter: string; value: number; limit_value: number; duration_seconds: number }
 interface TrendParam { slope: number; mean: number; stdDev: number; trending: string; anomalyIndices: number[]; rSquared: number; isAnomaly: boolean }
 interface TrendData { status: string; parameters: Record<string, TrendParam> }
 interface Upload { id: number; filename: string; record_count: number; engine_seconds_count: number; nav_seconds_count: number; uploaded_at: string; engine_id: string }
-interface UploadResult { uploadId: number; cruiseRecords: number; engineSeconds: number; navSeconds: number; exceedances: number; filename: string }
+interface UploadResult { uploadId: number; aircraftId: number; tailNumber: string; cruiseRecords: number; engineSeconds: number; navSeconds: number; exceedances: number; filename: string }
 interface FaultSummaryItem { system_id: number; fault_code: number; total_events: number; active_events: number; first_seen: string; last_seen: string; system_name: string | null; description: string | null }
 interface FaultSummaryData { summary: FaultSummaryItem[]; recent: unknown[]; legs: unknown[] }
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'NORMAL') return <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full">✓ TREND NORMAL</span>
-  if (status === 'ANOMALY') return <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-700 text-sm font-semibold px-3 py-1.5 rounded-full">⚠ TREND ANOMALY</span>
-  return <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-500 text-sm font-medium px-3 py-1.5 rounded-full">— Insufficient Data</span>
-}
 
 function linReg(vals: number[]) {
   const n = vals.length; if (n < 2) return { slope: 0, intercept: vals[0] ?? 0 }
@@ -295,7 +289,7 @@ export default function AircraftDetail() {
                 { key: 'fuel_flow', label: 'FUEL FLOW', val: latest.fuel_flow, unit: 'lbs/hr', limitVal: null, limitLabel: null, tpKey: 'fuel_flow' },
               ] as { key: string; label: string; val: number; unit: string; limitVal: number | null; limitLabel: string | null; tpKey: string }[]).map(card => {
                 const p = tp[card.tpKey]
-                const vals = records.map(r => parseFloat(String((r as Record<string,unknown>)[card.key])))
+                const vals = records.map(r => parseFloat(String((r as unknown as Record<string, unknown>)[card.key])))
                 const minV = Math.min(...vals), maxV = Math.max(...vals)
                 const pct = card.limitVal ? Math.min(100, (card.val / card.limitVal) * 100) : null
                 const slope = p?.slope ?? 0
@@ -526,7 +520,7 @@ export default function AircraftDetail() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="font-semibold text-slate-900">Fault History</h2>
-            {faultData?.legs?.length > 0 && (
+            {!!faultData?.legs?.length && (
               <span className="text-xs text-slate-400">{faultData.legs.length} flight legs · {faultData.summary?.reduce((s: number, f: FaultSummaryItem) => s + f.total_events, 0).toLocaleString()} fault events</span>
             )}
           </div>

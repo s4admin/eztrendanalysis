@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 
-declare global { interface Window { google: typeof google } }
+// Maps JS API is loaded at runtime from a script tag (no @types/google.maps)
+declare global { interface Window { google: any } }
 
 interface Aircraft { id: number; tail_number: string; make_model: string }
 interface Flight {
