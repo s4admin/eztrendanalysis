@@ -1,0 +1,17 @@
+{
+  "name": "eztrendanalysis",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=api",
+    "dev:web": "npm run dev --workspace=web"
+  },
+  "dependencies": {
+    "form-data": "^4.0.6",
+    "mailgun.js": "^13.2.0"
+  }
+}
