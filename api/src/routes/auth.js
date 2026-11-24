@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { login, register, requestPasswordReset, resetPassword } from '../logic/auth/index.js';
+import { login, register, requestPasswordReset, resetPassword, toClientUser } from '../logic/auth/index.js';
 import { requireAuth } from '../lib/auth/index.js';
 import { findUserById } from '../data/users.js';
 
@@ -33,7 +33,7 @@ router.post('/register', async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   const user = await findUserById({ id: req.user.userId });
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json(user);
+  res.json(toClientUser(user));
 });
 
 router.post('/forgot-password', async (req, res) => {

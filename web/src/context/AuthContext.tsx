@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { api, setToken, clearToken } from '../api/client'
-interface User { id: number; name: string; email: string }
+interface User { id: number; name: string; email: string; isAdmin: boolean }
 interface AuthCtx { user: User | null; loading: boolean; login(e: string, p: string): Promise<void>; register(n: string, e: string, p: string): Promise<void>; logout(): void }
 const Ctx = createContext<AuthCtx | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {

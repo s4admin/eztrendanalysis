@@ -3,6 +3,13 @@ import bcrypt from 'bcryptjs';
 import { signToken } from '../../lib/auth/index.js';
 import { findUserByEmail, findUserById, insertUser, updateLastLogin, findUserByResetToken, setResetToken, clearResetToken } from '../../data/users.js';
 import { sendEmail } from '../../lib/email.js';
+import { config } from '../../config.js';
+
+// The user fields sent to the browser, plus whether they can see the admin pages
+export const toClientUser = (user) => user && ({
+  id: user.id, name: user.name, email: user.email, created_at: user.created_at, last_login_at: user.last_login_at,
+  isAdmin: user.email === config.adminEmail,
+});
 
 export async function login({ email, password }) {
   const user = await findUserByEmail({ email });
@@ -10,8 +17,7 @@ export async function login({ email, password }) {
   const match = await bcrypt.compare(password, user.encrypted_password);
   if (!match) return null;
   await updateLastLogin({ id: user.id });
-  const { encrypted_password: _, ...safeUser } = user;
-  return { token: signToken({ userId: user.id }), user: safeUser };
+  return { token: signToken({ userId: user.id }), user: toClientUser(await findUserById({ id: user.id })) };
 }
 
 export async function register({ name, email, password }) {
@@ -20,7 +26,7 @@ export async function register({ name, email, password }) {
   const hash = await bcrypt.hash(password, 12);
   const id = await insertUser({ name, email, hash });
   const user = await findUserById({ id });
-  return { token: signToken({ userId: id }), user };
+  return { token: signToken({ userId: id }), user: toClientUser(user) };
 }
 
 export async function requestPasswordReset({ email, appUrl }) {

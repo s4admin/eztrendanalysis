@@ -3,6 +3,8 @@ import { requireAuth } from '../lib/auth/index.js';
 import { findAircraftByUser, findAircraftById, insertAircraft, updateAircraft, deleteAircraft } from '../data/aircraft.js';
 import { findUploadsByAircraft, findRecordsByAircraft, findExceedancesByAircraft, findEngineSecondsByAircraft, findLoadFactorDaysByAircraft } from '../data/uploads.js';
 import { analyzeTrend } from '../logic/analysis/index.js';
+import { findFaultSummary } from '../data/faults.js';
+import { writeTrendReport } from '../logic/reports/trend-pdf.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -63,6 +65,26 @@ router.get('/:id/exceedances', async (req, res) => {
   const aircraft = await findAircraftById({ id: Number(req.params.id), userId: req.user.userId });
   if (!aircraft) return res.status(404).json({ error: 'Not found' });
   res.json(await findExceedancesByAircraft({ aircraftId: aircraft.id }));
+});
+
+router.get('/:id/report', async (req, res) => {
+  try {
+    const aircraft = await findAircraftById({ id: Number(req.params.id), userId: req.user.userId });
+    if (!aircraft) return res.status(404).json({ error: 'Not found' });
+    const [records, exceedances, loadFactorDays, faultSummary] = await Promise.all([
+      findRecordsByAircraft({ aircraftId: aircraft.id }),
+      findExceedancesByAircraft({ aircraftId: aircraft.id }),
+      findLoadFactorDaysByAircraft({ aircraftId: aircraft.id }),
+      findFaultSummary({ aircraftId: aircraft.id }),
+    ]);
+    const filename = `${aircraft.tail_number}-trend-summary-${new Date().toISOString().slice(0, 10)}.pdf`.replace(/[^A-Za-z0-9._-]/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    writeTrendReport(res, { aircraft, records, exceedances, loadFactorDays, faultSummary });
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/:id/load-factor', async (req, res) => {

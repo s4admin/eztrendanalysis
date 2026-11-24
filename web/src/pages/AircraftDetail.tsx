@@ -58,7 +58,7 @@ function linReg(vals: number[]) {
 function TrendChart({ records, param, label, unit, limitValue, color }: {
   records: CruiseRecord[]; param: keyof CruiseRecord; label: string; unit: string; limitValue?: number; color: string
 }) {
-  const data = records.map((r, i) => ({ i, value: parseFloat(String(r[param])), date: r.flight_date }))
+  const data = records.map((r, i) => ({ i, value: parseFloat(String(r[param])), date: String(r.flight_date).slice(0, 10) }))
   if (data.length < 2) return <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-center text-slate-400 text-sm h-44">Not enough data</div>
   const vals = data.map(d => d.value)
   const { slope, intercept } = linReg(vals)
@@ -75,7 +75,7 @@ function TrendChart({ records, param, label, unit, limitValue, color }: {
         <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
-          <YAxis domain={[minY, maxY]} tick={{ fontSize: 10 }} tickLine={false} width={42} />
+          <YAxis domain={[minY, maxY]} tick={{ fontSize: 10 }} tickLine={false} width={42} tickFormatter={(v: number) => v.toFixed(1)} />
           <Tooltip formatter={(v: number) => [v.toFixed(1) + ' ' + unit, '']} />
           <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={{ r: 4, fill: color }} name={label} />
           <Line type="monotone" dataKey="trend" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 3" dot={false} name="Trend" />
@@ -182,6 +182,7 @@ export default function AircraftDetail() {
   const [uploadError, setUploadError] = useState('')
   const [uploadSuccess, setUploadSuccess] = useState<UploadResult | null>(null)
   const [selectedUpload, setSelectedUpload] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: aircraft } = useQuery({ queryKey: ['aircraft', aircraftId], queryFn: () => api.get<Aircraft>('/aircraft/' + aircraftId) })
@@ -306,6 +307,18 @@ export default function AircraftDetail() {
                 TREND ANOMALY
               </div>
             )}
+            <button
+              onClick={async () => {
+                setExporting(true)
+                try { await api.download(`/aircraft/${aircraftId}/report`, `${aircraft.tail_number}-trend-summary.pdf`) }
+                catch (err) { alert(err instanceof Error ? err.message : 'Export failed') }
+                finally { setExporting(false) }
+              }}
+              disabled={exporting}
+              className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50 font-medium border border-sky-700 px-3 py-1.5 rounded-lg" style={{fontFamily:'monospace',letterSpacing:'0.08em'}}
+            >
+              {exporting ? 'EXPORTING…' : '⬇ EXPORT PDF'}
+            </button>
             <Link to={`/aircraft/${aircraftId}/flights`} className="text-xs text-sky-400 hover:text-sky-300 font-medium border border-sky-700 px-3 py-1.5 rounded-lg" style={{fontFamily:'monospace',letterSpacing:'0.08em'}}>✈ FLIGHT LOG</Link>
           </div>
         </div>

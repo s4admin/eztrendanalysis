@@ -15,7 +15,7 @@ export default function Layout() {
           <nav className="flex gap-4">
             <Link to="/dashboard" className={"text-sm font-medium px-3 py-1.5 rounded-lg " + (loc.pathname === '/dashboard' ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900')}>Dashboard</Link>
             <Link to="/aircraft" className={"text-sm font-medium px-3 py-1.5 rounded-lg " + (loc.pathname.startsWith('/aircraft') ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900')}>Aircraft</Link>
-            {user.email === 'adam@pilotica.com' && <Link to="/admin" className={"text-sm font-medium px-3 py-1.5 rounded-lg " + (loc.pathname.startsWith('/admin') ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900')}>Admin</Link>}
+            {user.isAdmin && <Link to="/admin" className={"text-sm font-medium px-3 py-1.5 rounded-lg " + (loc.pathname.startsWith('/admin') ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900')}>Admin</Link>}
           </nav>
         </div>
         <div className="flex items-center gap-3">
